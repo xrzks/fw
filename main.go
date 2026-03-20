@@ -1,16 +1,25 @@
 package main
 
 import (
-	"context"
+	"flag"
 	"fmt"
 	"os"
 
-	"github.com/xrzks/fw/internal/cli"
+	"github.com/xrzks/fw/internal/watcher"
 )
 
 func main() {
-	cmd := cli.NewRootCommand()
-	if err := cmd.Run(context.Background(), os.Args); err != nil {
+	var cmd string
+	flag.StringVar(&cmd, "c", "", "command to run on file changes")
+	flag.Parse()
+
+	path := "."
+	args := flag.Args()
+	if len(args) > 0 {
+		path = args[0]
+	}
+
+	if err := watcher.Watch(path, cmd); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
