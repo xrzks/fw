@@ -3,14 +3,12 @@ package watcher
 import (
 	"fmt"
 	"log"
-	"os"
-	"os/exec"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
 )
 
-func Watch(path string, cmd string, debounce int) error {
+func Watch(path string, cmd string, debounceMs int) error {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return fmt.Errorf("failed to create watcher: %w", err)
@@ -22,21 +20,18 @@ func Watch(path string, cmd string, debounce int) error {
 		return fmt.Errorf("failed to watch path: %w", err)
 	}
 
-	info, err := os.Stat(path)
+	pathInfo, err := NewPathInfo(path)
 	if err != nil {
-		return fmt.Errorf("failed to stat path: %w", err)
+		return err
 	}
+	pathInfo.PrintStatus()
 
-	pathType := "directory"
-	if info.Mode().IsRegular() {
-		pathType = "file"
-	}
-
-	fmt.Printf("Watching %s: %s\n", pathType, path)
-
-	debounceDelay := time.Duration(debounce) * time.Millisecond
-	debounceTimer := time.NewTimer(time.Hour)
-	debounceTimer.Stop()
+	executor := NewExecutor(cmd)
+	debouncer := NewDebouncer(time.Duration(debounceMs)*time.Millisecond, func() {
+		if err := executor.Execute(); err != nil {
+			log.Printf("Execution error: %v", err)
+		}
+	})
 
 	for {
 		select {
@@ -44,22 +39,9 @@ func Watch(path string, cmd string, debounce int) error {
 			if !ok {
 				return fmt.Errorf("watcher events channel closed")
 			}
-			if !debounceTimer.Stop() {
-				select {
-				case <-debounceTimer.C:
-				default:
-				}
-			}
-			debounceTimer.Reset(debounceDelay)
-		case <-debounceTimer.C:
-			if cmd != "" {
-				fmt.Println("change detected, running: " + cmd)
-				output, err := exec.Command("sh", "-c", cmd).CombinedOutput()
-				if err != nil {
-					fmt.Println(err)
-				}
-				fmt.Println(string(output))
-			}
+			debouncer.Trigger()
+		case <-debouncer.Start():
+			executor.Execute()
 		case err, ok := <-watcher.Errors:
 			if !ok {
 				return fmt.Errorf("watcher errors channel closed")
