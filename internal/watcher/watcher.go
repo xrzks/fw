@@ -27,21 +27,21 @@ func Watch(path string, commands []string, debounceMs int) error {
 	pathInfo.PrintStatus()
 
 	executor := NewExecutor(commands)
-	debouncer := NewDebouncer(time.Duration(debounceMs)*time.Millisecond, func() {
-		if err := executor.Execute(); err != nil {
+	debouncer := NewDebouncer(time.Duration(debounceMs)*time.Millisecond, func(event fsnotify.Event) {
+		if err := executor.Execute(event); err != nil {
 			log.Printf("Execution error: %v", err)
 		}
 	})
 
 	for {
 		select {
-		case _, ok := <-watcher.Events:
+		case event, ok := <-watcher.Events:
 			if !ok {
 				return fmt.Errorf("watcher events channel closed")
 			}
-			debouncer.Trigger()
-		case <-debouncer.Start():
-			executor.Execute()
+			debouncer.Trigger(event)
+		case <-debouncer.getTimerChannel():
+			debouncer.onTimerFire()
 		case err, ok := <-watcher.Errors:
 			if !ok {
 				return fmt.Errorf("watcher errors channel closed")
