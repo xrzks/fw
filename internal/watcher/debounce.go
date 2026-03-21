@@ -5,9 +5,9 @@ import (
 )
 
 type Debouncer struct {
-	timer     *time.Timer
-	delay     time.Duration
-	callback  func()
+	timer    *time.Timer
+	delay    time.Duration
+	callback func()
 }
 
 func NewDebouncer(delay time.Duration, callback func()) *Debouncer {

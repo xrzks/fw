@@ -6,24 +6,28 @@ import (
 )
 
 type Executor struct {
-	command string
+	commands []string
 }
 
-func NewExecutor(cmd string) *Executor {
-	return &Executor{command: cmd}
+func NewExecutor(commands []string) *Executor {
+	return &Executor{commands: commands}
 }
 
 func (e *Executor) Execute() error {
-	if e.command == "" {
+	if len(e.commands) == 0 {
 		return nil
 	}
 
-	fmt.Println("change detected, running: " + e.command)
-	output, err := exec.Command("sh", "-c", e.command).CombinedOutput()
-	if err != nil {
-		fmt.Println(err)
-		return err
+	fmt.Println("change detected")
+	var lastErr error
+	for _, cmd := range e.commands {
+		fmt.Println("running: " + cmd)
+		output, err := exec.Command("sh", "-c", cmd).CombinedOutput()
+		if err != nil {
+			fmt.Println(err)
+			lastErr = err
+		}
+		fmt.Println(string(output))
 	}
-	fmt.Println(string(output))
-	return nil
+	return lastErr
 }

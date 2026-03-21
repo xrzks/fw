@@ -8,7 +8,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
-func Watch(path string, cmd string, debounceMs int) error {
+func Watch(path string, commands []string, debounceMs int) error {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return fmt.Errorf("failed to create watcher: %w", err)
@@ -26,7 +26,7 @@ func Watch(path string, cmd string, debounceMs int) error {
 	}
 	pathInfo.PrintStatus()
 
-	executor := NewExecutor(cmd)
+	executor := NewExecutor(commands)
 	debouncer := NewDebouncer(time.Duration(debounceMs)*time.Millisecond, func() {
 		if err := executor.Execute(); err != nil {
 			log.Printf("Execution error: %v", err)

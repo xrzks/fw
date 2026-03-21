@@ -6,8 +6,8 @@ import (
 )
 
 type PathInfo struct {
-	Path      string
-	PathType  string
+	Path     string
+	PathType string
 }
 
 func NewPathInfo(path string) (*PathInfo, error) {
