@@ -1,31 +1,21 @@
 package main
 
 import (
-	"flag"
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
-	"github.com/xrzks/fw/internal/watcher"
+	"github.com/xrzks/fw/internal/cli"
 )
 
 func main() {
-	var commands []string
-	var debounce int
-	flag.IntVar(&debounce, "d", 500, "debounce delay in milliseconds")
-	flag.Func("c", "command to run on file changes", func(val string) error {
-		commands = append(commands, val)
-		return nil
-	})
-	flag.Parse()
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
-	path := "."
-	args := flag.Args()
-	if len(args) > 0 {
-		path = args[0]
-	}
-
-	if err := watcher.Watch(path, commands, debounce); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+	if err := cli.New().Run(ctx, os.Args); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
 }
