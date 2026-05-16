@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/urfave/cli/v3"
 	"github.com/xrzks/fw/internal/watcher"
@@ -41,13 +42,13 @@ func New() *cli.Command {
 }
 
 func run(ctx context.Context, cmd *cli.Command) error {
-	var path string
-	path = cmd.StringArg("path")
+	path := cmd.StringArg("path")
 	if path == "" {
 		path = "."
 	}
 	debounce := cmd.Int("debounce")
-	commands := cmd.StringSlice("command")
-	debug := cmd.Bool("debug")
-	return watcher.Watch(ctx, path, commands, debounce, debug)
+	if debounce <= 0 {
+		return fmt.Errorf("debounce must be a positive integer, got %d", debounce)
+	}
+	return watcher.Watch(ctx, path, cmd.StringSlice("command"), debounce, cmd.Bool("debug"))
 }
