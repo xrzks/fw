@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
+	"github.com/fsnotify/fsnotify"
 )
 
 func newTestLogger() *log.Logger {
@@ -143,6 +144,114 @@ func TestGetPathTypeDir(t *testing.T) {
 	}
 	if pt != "directory" {
 		t.Errorf("expected directory, got %q", pt)
+	}
+}
+
+func TestWatchRecursiveDetectsNestedFileChange(t *testing.T) {
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "a", "b")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatalf("failed to create nested dirs: %v", err)
+	}
+
+	nestedFile := filepath.Join(sub, "deep.txt")
+	if err := os.WriteFile(nestedFile, []byte("initial"), 0o644); err != nil {
+		t.Fatalf("failed to create nested file: %v", err)
+	}
+
+	marker := filepath.Join(dir, "ran")
+	commands := []string{"touch " + marker}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- Watch(ctx, dir, commands, newTestLogger())
+	}()
+
+	time.Sleep(200 * time.Millisecond)
+
+	if err := os.WriteFile(nestedFile, []byte("modified"), 0o644); err != nil {
+		t.Fatalf("failed to modify nested file: %v", err)
+	}
+
+	err := waitForFile(marker, 3*time.Second)
+	if err != nil {
+		t.Fatalf("command did not execute after nested file change: %v", err)
+	}
+
+	cancel()
+
+	if err := <-errCh; err != nil {
+		t.Fatalf("Watch returned error: %v", err)
+	}
+}
+
+func TestWatchRecursiveDetectsNewDirectory(t *testing.T) {
+	dir := t.TempDir()
+
+	marker := filepath.Join(dir, "ran")
+	commands := []string{"touch " + marker}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- Watch(ctx, dir, commands, newTestLogger())
+	}()
+
+	time.Sleep(200 * time.Millisecond)
+
+	newDir := filepath.Join(dir, "subdir")
+	if err := os.Mkdir(newDir, 0o755); err != nil {
+		t.Fatalf("failed to create new directory: %v", err)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	newFile := filepath.Join(newDir, "file.txt")
+	if err := os.WriteFile(newFile, []byte("hello"), 0o644); err != nil {
+		t.Fatalf("failed to create file in new directory: %v", err)
+	}
+
+	err := waitForFile(marker, 3*time.Second)
+	if err != nil {
+		t.Fatalf("command did not execute after file change in newly created directory: %v", err)
+	}
+
+	cancel()
+
+	if err := <-errCh; err != nil {
+		t.Fatalf("Watch returned error: %v", err)
+	}
+}
+
+func TestAddWatchDir(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "a", "b"), 0o755); err != nil {
+		t.Fatalf("failed to create nested dirs: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "a", "file.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatalf("failed to create file: %v", err)
+	}
+
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		t.Fatalf("failed to create watcher: %v", err)
+	}
+	defer watcher.Close()
+
+	logger := newTestLogger()
+
+	count, err := addWatchDir(watcher, dir, logger)
+	if err != nil {
+		t.Fatalf("addWatchDir failed: %v", err)
+	}
+
+	if count != 3 {
+		t.Errorf("expected 3 directories watched, got %d", count)
 	}
 }
 

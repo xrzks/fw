@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"time"
 
 	"github.com/charmbracelet/log"
@@ -24,17 +25,25 @@ func Watch(ctx context.Context, path string, commands []string, logger *log.Logg
 
 	logger.Debug("Created fsnotify watcher")
 
-	if err := watcher.Add(path); err != nil {
-		return fmt.Errorf("failed to watch path %q: %w", path, err)
-	}
-
-	logger.Debugf("Added path to watcher: %s", path)
-
 	pt, err := getPathType(path)
 	if err != nil {
 		return err
 	}
-	logger.Infof("Watching %s: %s", pt, path)
+
+	var watchedCount int
+	if pt == "file" {
+		if err := watcher.Add(path); err != nil {
+			return fmt.Errorf("failed to watch path %q: %w", path, err)
+		}
+		watchedCount = 1
+		logger.Infof("Watching %s: %s", pt, path)
+	} else {
+		watchedCount, err = addWatchDir(watcher, path, logger)
+		if err != nil {
+			return fmt.Errorf("failed to watch path %q: %w", path, err)
+		}
+		logger.Infof("Watching directory: %s (%d subdirectories)", path, watchedCount)
+	}
 
 	debouncer := NewDebouncer(ctx, time.Duration(debounceMs)*time.Millisecond, func(event fsnotify.Event) {
 		logger.Debugf("Triggering debouncer for event: %s (%v)", event.Name, event.Op)
@@ -56,6 +65,16 @@ func Watch(ctx context.Context, path string, commands []string, logger *log.Logg
 					return
 				}
 				logger.Debugf("Received event: %s (%v)", event.Name, event.Op)
+				if event.Has(fsnotify.Create) {
+					if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
+						count, err := addWatchDir(watcher, event.Name, logger)
+						if err != nil {
+							logger.Errorf("Failed to watch new directory %q: %v", event.Name, err)
+						} else {
+							logger.Debugf("Watching new directory: %s (%d subdirectories)", event.Name, count)
+						}
+					}
+				}
 				debouncer.Trigger(event)
 			case err, ok := <-watcher.Errors:
 				if !ok {
@@ -81,6 +100,26 @@ func getPathType(path string) (string, error) {
 		return "file", nil
 	}
 	return "directory", nil
+}
+
+func addWatchDir(watcher *fsnotify.Watcher, root string, logger *log.Logger) (int, error) {
+	var count int
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			logger.Debugf("Skipping inaccessible path %q: %v", path, err)
+			return nil
+		}
+		if !d.IsDir() {
+			return nil
+		}
+		if err := watcher.Add(path); err != nil {
+			logger.Debugf("Skipping unwatchable directory %q: %v", path, err)
+			return nil
+		}
+		count++
+		return nil
+	})
+	return count, err
 }
 
 func runCommands(ctx context.Context, commands []string, event fsnotify.Event, logger *log.Logger) error {
