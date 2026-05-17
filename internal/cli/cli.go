@@ -21,10 +21,15 @@ func New() *cli.Command {
 				Aliases: []string{"c"},
 				Usage:   "command to run on file changes (can be specified multiple times)",
 			},
-&cli.BoolFlag{
+			&cli.BoolFlag{
 				Name:    "debug",
 				Aliases: []string{"D"},
 				Usage:   "enable debug logging",
+			},
+			&cli.StringSliceFlag{
+				Name:    "extension",
+				Aliases: []string{"e"},
+				Usage:   "file extension to watch (can be specified multiple times)",
 			},
 		},
 		Arguments: []cli.Argument{
@@ -42,7 +47,6 @@ func run(ctx context.Context, cmd *cli.Command) error {
 	if path == "" {
 		path = "."
 	}
-
 	logger := log.New(os.Stderr)
 	if cmd.Bool("debug") {
 		logger.SetLevel(log.DebugLevel)
@@ -50,5 +54,5 @@ func run(ctx context.Context, cmd *cli.Command) error {
 		logger.SetLevel(log.InfoLevel)
 	}
 
-	return watcher.Watch(ctx, path, cmd.StringSlice("command"), logger)
+	return watcher.Watch(ctx, path, cmd.StringSlice("command"), cmd.StringSlice("extension"), logger)
 }

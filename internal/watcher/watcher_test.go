@@ -32,7 +32,7 @@ func TestWatchDetectsFileChange(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- Watch(ctx, dir, commands, newTestLogger())
+		errCh <- Watch(ctx, dir, commands, nil, newTestLogger())
 	}()
 
 	time.Sleep(200 * time.Millisecond)
@@ -64,7 +64,7 @@ func TestWatchDetectsNewFile(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- Watch(ctx, dir, commands, newTestLogger())
+		errCh <- Watch(ctx, dir, commands, nil, newTestLogger())
 	}()
 
 	time.Sleep(200 * time.Millisecond)
@@ -90,7 +90,7 @@ func TestWatchInvalidPath(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	err := Watch(ctx, "/nonexistent/path/that/does/not/exist", nil, newTestLogger())
+	err := Watch(ctx, "/nonexistent/path/that/does/not/exist", nil, nil, newTestLogger())
 	if err == nil {
 		t.Error("expected error for invalid path")
 	}
@@ -103,7 +103,7 @@ func TestWatchContextCancellation(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- Watch(ctx, dir, []string{"echo test"}, newTestLogger())
+		errCh <- Watch(ctx, dir, []string{"echo test"}, nil, newTestLogger())
 	}()
 
 	time.Sleep(100 * time.Millisecond)
@@ -167,7 +167,7 @@ func TestWatchRecursiveDetectsNestedFileChange(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- Watch(ctx, dir, commands, newTestLogger())
+		errCh <- Watch(ctx, dir, commands, nil, newTestLogger())
 	}()
 
 	time.Sleep(200 * time.Millisecond)
@@ -199,7 +199,7 @@ func TestWatchRecursiveDetectsNewDirectory(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- Watch(ctx, dir, commands, newTestLogger())
+		errCh <- Watch(ctx, dir, commands, nil, newTestLogger())
 	}()
 
 	time.Sleep(200 * time.Millisecond)
@@ -259,6 +259,80 @@ func TestGetPathTypeInvalid(t *testing.T) {
 	_, err := getPathType("/nonexistent/path")
 	if err == nil {
 		t.Error("expected error for invalid path")
+	}
+}
+
+func TestMatchExtension(t *testing.T) {
+	tests := []struct {
+		name       string
+		fileName   string
+		extensions []string
+		want       bool
+	}{
+		{"no extensions matches all", "foo.go", nil, true},
+		{"empty extensions matches all", "foo.go", []string{}, true},
+		{"exact match with dot", "foo.go", []string{".go"}, true},
+		{"match without dot", "foo.go", []string{"go"}, true},
+		{"case insensitive", "foo.Go", []string{".go"}, true},
+		{"no match", "foo.go", []string{".rs"}, false},
+		{"multiple extensions match", "foo.go", []string{".rs", ".go"}, true},
+		{"multiple extensions no match", "foo.go", []string{".rs", ".py"}, false},
+		{"no extension file", "Makefile", []string{".go"}, false},
+		{"no extension file nil filter", "Makefile", nil, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := matchExtension(tt.fileName, tt.extensions); got != tt.want {
+				t.Errorf("matchExtension(%q, %v) = %v, want %v", tt.fileName, tt.extensions, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestWatchExtensionFilter(t *testing.T) {
+	dir := t.TempDir()
+	goFile := filepath.Join(dir, "test.go")
+	txtFile := filepath.Join(dir, "test.txt")
+	if err := os.WriteFile(goFile, []byte("initial"), 0o644); err != nil {
+		t.Fatalf("failed to create go file: %v", err)
+	}
+	if err := os.WriteFile(txtFile, []byte("initial"), 0o644); err != nil {
+		t.Fatalf("failed to create txt file: %v", err)
+	}
+
+	marker := filepath.Join(dir, "ran")
+	commands := []string{"touch " + marker}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- Watch(ctx, dir, commands, []string{".go"}, newTestLogger())
+	}()
+
+	time.Sleep(200 * time.Millisecond)
+
+	if err := os.WriteFile(txtFile, []byte("modified"), 0o644); err != nil {
+		t.Fatalf("failed to modify txt file: %v", err)
+	}
+
+	time.Sleep(1 * time.Second)
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("command should not have run for .txt file when filtering by .go")
+	}
+
+	if err := os.WriteFile(goFile, []byte("modified"), 0o644); err != nil {
+		t.Fatalf("failed to modify go file: %v", err)
+	}
+
+	if err := waitForFile(marker, 3*time.Second); err != nil {
+		t.Fatalf("command did not execute for .go file: %v", err)
+	}
+
+	cancel()
+	if err := <-errCh; err != nil {
+		t.Fatalf("Watch returned error: %v", err)
 	}
 }
 

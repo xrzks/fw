@@ -20,8 +20,8 @@ func TestNewCommand(t *testing.T) {
 	if cmd.Action == nil {
 		t.Error("expected action to be set")
 	}
-	if len(cmd.Flags) != 2 {
-		t.Errorf("expected 2 flags, got %d", len(cmd.Flags))
+	if len(cmd.Flags) != 3 {
+		t.Errorf("expected 3 flags, got %d", len(cmd.Flags))
 	}
 }
 
@@ -35,7 +35,7 @@ func TestRunFlags(t *testing.T) {
 		}
 	}
 
-	for _, name := range []string{"command", "c", "debug", "D"} {
+	for _, name := range []string{"command", "c", "debug", "D", "extension", "e"} {
 		if !found[name] {
 			t.Errorf("expected flag %q to be defined", name)
 		}

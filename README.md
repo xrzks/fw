@@ -7,6 +7,7 @@ A file watcher CLI that watches directories or files for changes and executes co
 - Watch files or directories (recursive)
 - Execute one or more commands on file changes
 - Built-in 500ms debounce to coalesce rapid-fire events
+- File extension filtering
 - Automatic watching of newly created subdirectories
 - Debug logging mode
 - Graceful shutdown via SIGINT/SIGTERM
@@ -55,6 +56,22 @@ fw -c "npm run build" -c "npm run test"
 
 Commands execute in the order specified. If a command fails, execution continues with the next command.
 
+### Extension filtering
+
+Filter events to specific file extensions:
+
+```bash
+fw -c "go test ./..." -e .go
+```
+
+Watch multiple extensions:
+
+```bash
+fw -c "npm run build" -e .js -e .ts -e .css
+```
+
+Extensions can be specified with or without a leading dot (`go` and `.go` both work). Matching is case-insensitive.
+
 ### Debug mode
 
 Enable debug logging to see internal event processing details:
@@ -71,8 +88,7 @@ go install github.com/xrzks/fw@latest
 
 ## Roadmap
 
-- Environment variable expansion (`$FILE`, `$EVENT`)
-- File extension filtering
-- Ignore patterns (`.gitignore` style)
 - Local config file (`.fw.json`)
+- Ignore patterns (`.gitignore` style)
+- Environment variable expansion (`$FILE`, `$EVENT`)
 - Stop on first command failure flag (`-e`)

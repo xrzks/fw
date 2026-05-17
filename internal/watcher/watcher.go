@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/log"
@@ -14,7 +15,7 @@ import (
 
 const debounceMs = 500
 
-func Watch(ctx context.Context, path string, commands []string, logger *log.Logger) error {
+func Watch(ctx context.Context, path string, commands []string, extensions []string, logger *log.Logger) error {
 	logger.Debugf("Starting watcher with path: %s, debounce: %dms", path, debounceMs)
 
 	watcher, err := fsnotify.NewWatcher()
@@ -75,6 +76,10 @@ func Watch(ctx context.Context, path string, commands []string, logger *log.Logg
 						}
 					}
 				}
+				if !matchExtension(event.Name, extensions) {
+					logger.Debugf("Skipping event: extension filter did not match %s", event.Name)
+					continue
+				}
 				debouncer.Trigger(event)
 			case err, ok := <-watcher.Errors:
 				if !ok {
@@ -120,6 +125,19 @@ func addWatchDir(watcher *fsnotify.Watcher, root string, logger *log.Logger) (in
 		return nil
 	})
 	return count, err
+}
+
+func matchExtension(name string, extensions []string) bool {
+	if len(extensions) == 0 {
+		return true
+	}
+	ext := filepath.Ext(name)
+	for _, e := range extensions {
+		if strings.EqualFold(ext, e) || strings.EqualFold(ext, "."+e) {
+			return true
+		}
+	}
+	return false
 }
 
 func runCommands(ctx context.Context, commands []string, event fsnotify.Event, logger *log.Logger) error {
