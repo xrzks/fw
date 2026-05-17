@@ -1,14 +1,15 @@
 # fw
 
-A simple file watcher CLI that watches directories or files for changes and executes commands.
+A file watcher CLI that watches directories or files for changes and executes commands. Built with Go, powered by [fsnotify](https://github.com/fsnotify/fsnotify) and [urfave/cli](https://github.com/urfave/cli).
 
 ## Features
 
-- Watch directories or files
+- Watch files or directories (recursive)
 - Execute one or more commands on file changes
-- Configurable debounce delay to handle rapid-fire events
-- Shows which file and operation triggered command execution
-- Simple, language-agnostic CLI - works with any project
+- Built-in 500ms debounce to coalesce rapid-fire events
+- Automatic watching of newly created subdirectories
+- Debug logging mode
+- Graceful shutdown via SIGINT/SIGTERM
 
 ## Usage
 
@@ -52,43 +53,26 @@ Run multiple commands in sequence:
 fw -c "npm run build" -c "npm run test"
 ```
 
-Commands execute in the order specified. If a command fails, execution continues with the next command. The tool outputs "change detected: <filename> (<operation>)" when changes trigger command execution.
+Commands execute in the order specified. If a command fails, execution continues with the next command.
 
-### Configure debounce delay
+### Debug mode
 
-Debounce delay determines how long (in milliseconds) to wait after the last file change before running commands. This prevents running commands multiple times for rapid successive changes (e.g., during quick edits).
-
-Set custom debounce delay (default: 500ms):
+Enable debug logging to see internal event processing details:
 
 ```bash
-fw -d 2000 -c "npm run build"
+fw -D -c "npm run build"
 ```
 
-Use a longer debounce for slow builds to accumulate rapid changes into a single execution:
+## Installation
 
 ```bash
-fw ./src -c "make" -d 5000
+go install github.com/xrzks/fw@latest
 ```
 
 ## Roadmap
 
-Planned features:
-
 - Environment variable expansion (`$FILE`, `$EVENT`)
 - File extension filtering
 - Ignore patterns (`.gitignore` style)
-- Graceful shutdown (SIGINT/SIGTERM)
-- Dont continue with next command if the previous one fails flag, end on failure (`-e true`)
-
-## Philosophy
-
-**Simple over complex** - fw aims to fill the gap between:
-
-- Complex tools like `watchexec` with many features
-- Write-your-own shell scripts
-
-**Flexible** - Language-agnostic through shell commands, works for any project.
-
-## License
-
-MIT
+- Local config file (`.fw.json`)
+- Stop on first command failure flag (`-e`)
