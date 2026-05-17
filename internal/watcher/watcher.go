@@ -7,40 +7,39 @@ import (
 	"os/exec"
 	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/fsnotify/fsnotify"
-	"github.com/xrzks/fw/internal/logger"
 )
 
-func Watch(ctx context.Context, path string, commands []string, debounceMs int, debug bool) error {
-	log := logger.New(debug)
+const debounceMs = 500
 
-	log.Debug("Starting watcher with path: %s, debounce: %dms, debug: %v", path, debounceMs, debug)
+func Watch(ctx context.Context, path string, commands []string, logger *log.Logger) error {
+	logger.Debugf("Starting watcher with path: %s, debounce: %dms", path, debounceMs)
 
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		log.Close()
 		return fmt.Errorf("failed to create watcher: %w", err)
 	}
 	defer watcher.Close()
 
-	log.Debug("Created fsnotify watcher")
+	logger.Debug("Created fsnotify watcher")
 
 	if err := watcher.Add(path); err != nil {
-		log.Close()
 		return fmt.Errorf("failed to watch path %q: %w", path, err)
 	}
 
-	log.Debug("Added path to watcher: %s", path)
+	logger.Debugf("Added path to watcher: %s", path)
 
-	if err := printPathStatus(path, debounceMs, log); err != nil {
-		log.Close()
+	pt, err := getPathType(path)
+	if err != nil {
 		return err
 	}
+	logger.Infof("Watching %s: %s", pt, path)
 
 	debouncer := NewDebouncer(ctx, time.Duration(debounceMs)*time.Millisecond, func(event fsnotify.Event) {
-		log.Debug("Triggering debouncer for event: %s (%v)", event.Name, event.Op)
-		if err := runCommands(ctx, commands, event, log); err != nil {
-			log.Error("Command failed: %v", err)
+		logger.Debugf("Triggering debouncer for event: %s (%v)", event.Name, event.Op)
+		if err := runCommands(ctx, commands, event, logger); err != nil {
+			logger.Errorf("Command failed: %v", err)
 		}
 	})
 
@@ -50,19 +49,19 @@ func Watch(ctx context.Context, path string, commands []string, debounceMs int, 
 		for {
 			select {
 			case <-ctx.Done():
-				log.Info("Stopping watcher...")
+				logger.Info("Stopping watcher...")
 				return
 			case event, ok := <-watcher.Events:
 				if !ok {
 					return
 				}
-				log.Debug("Received event: %s (%v)", event.Name, event.Op)
+				logger.Debugf("Received event: %s (%v)", event.Name, event.Op)
 				debouncer.Trigger(event)
 			case err, ok := <-watcher.Errors:
 				if !ok {
 					return
 				}
-				log.Error("Watcher error: %v", err)
+				logger.Errorf("Watcher error: %v", err)
 				return
 			}
 		}
@@ -70,28 +69,25 @@ func Watch(ctx context.Context, path string, commands []string, debounceMs int, 
 
 	<-done
 	debouncer.Stop()
-	log.Close()
 	return nil
 }
 
-func printPathStatus(path string, debounceMs int, log *logger.Logger) error {
+func getPathType(path string) (string, error) {
 	info, err := os.Stat(path)
 	if err != nil {
-		return fmt.Errorf("failed to stat path: %w", err)
+		return "", fmt.Errorf("failed to stat path: %w", err)
 	}
-	pathType := "directory"
 	if info.Mode().IsRegular() {
-		pathType = "file"
+		return "file", nil
 	}
-	log.Info("Watching %s: %s (debounce: %dms)", pathType, path, debounceMs)
-	return nil
+	return "directory", nil
 }
 
-func runCommands(ctx context.Context, commands []string, event fsnotify.Event, log *logger.Logger) error {
-	log.Debug("Change detected: %s (%v)", event.Name, event.Op)
+func runCommands(ctx context.Context, commands []string, event fsnotify.Event, logger *log.Logger) error {
+	logger.Debugf("Change detected: %s (%v)", event.Name, event.Op)
 	if len(commands) == 0 {
 		fmt.Printf("\n--- change detected: %s (%v) ---\n", event.Name, event.Op)
-		log.Info("No commands configured to run for this change")
+		logger.Info("No commands configured to run for this change")
 		return nil
 	}
 
@@ -103,7 +99,7 @@ func runCommands(ctx context.Context, commands []string, event fsnotify.Event, l
 		default:
 		}
 
-		log.Debug("Running command %d/%d: %s", i+1, len(commands), cmd)
+		logger.Debugf("Running command %d/%d: %s", i+1, len(commands), cmd)
 		fmt.Printf("[%d/%d] running: %s\n", i+1, len(commands), cmd)
 
 		command := exec.CommandContext(ctx, "sh", "-c", cmd)
@@ -111,11 +107,11 @@ func runCommands(ctx context.Context, commands []string, event fsnotify.Event, l
 		command.Stderr = os.Stderr
 
 		if err := command.Run(); err != nil {
-			log.Error("Command %d/%d failed: %v", i+1, len(commands), err)
+			logger.Errorf("Command %d/%d failed: %v", i+1, len(commands), err)
 			fmt.Printf("[%d/%d] failed: %v\n", i+1, len(commands), err)
 			lastErr = fmt.Errorf("command %q: %w", cmd, err)
 		} else {
-			log.Debug("Command %d/%d completed successfully", i+1, len(commands))
+			logger.Debugf("Command %d/%d completed successfully", i+1, len(commands))
 			fmt.Printf("[%d/%d] done\n", i+1, len(commands))
 		}
 	}
