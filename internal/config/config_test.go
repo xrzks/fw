@@ -16,7 +16,7 @@ commands = ["npm run build", "npm test"]
 extensions = [".js", ".ts"]
 debug = true
 `
-	if err := os.WriteFile(cfgPath, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(cfgPath, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -53,7 +53,7 @@ func TestLoadInvalidTOML(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "fw.toml")
 
-	if err := os.WriteFile(cfgPath, []byte("not valid toml {{{{"), 0644); err != nil {
+	if err := os.WriteFile(cfgPath, []byte("not valid toml {{{{"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -67,7 +67,7 @@ func TestLoadEmptyConfig(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "fw.toml")
 
-	if err := os.WriteFile(cfgPath, []byte(""), 0644); err != nil {
+	if err := os.WriteFile(cfgPath, []byte(""), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -90,7 +90,7 @@ func TestFindFwToml(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "fw.toml")
 
-	if err := os.WriteFile(cfgPath, []byte(`path = "./src"`), 0644); err != nil {
+	if err := os.WriteFile(cfgPath, []byte(`path = "./src"`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -116,7 +116,7 @@ func TestFindHiddenFwToml(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, ".fw.toml")
 
-	if err := os.WriteFile(cfgPath, []byte(`path = "./lib"`), 0644); err != nil {
+	if err := os.WriteFile(cfgPath, []byte(`path = "./lib"`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -156,13 +156,71 @@ func TestFindNoConfig(t *testing.T) {
 	}
 }
 
+func TestLoadGitignoreFiltersCommentsAndBlankLines(t *testing.T) {
+	dir := t.TempDir()
+
+	gitignoreContent := `# Build output
+/build
+
+# Dependencies
+node_modules
+`
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(gitignoreContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	patterns := loadGitignore(dir)
+
+	expected := []string{"/build", "node_modules"}
+	if len(patterns) != len(expected) {
+		t.Fatalf("expected %d patterns, got %d: %v", len(expected), len(patterns), patterns)
+	}
+	for i, exp := range expected {
+		if patterns[i] != exp {
+			t.Errorf("pattern[%d]: expected %q, got %q", i, exp, patterns[i])
+		}
+	}
+}
+
+func TestLoadGitignoreNoFile(t *testing.T) {
+	dir := t.TempDir()
+	patterns := loadGitignore(dir)
+	if len(patterns) != 0 {
+		t.Errorf("expected no patterns, got %v", patterns)
+	}
+}
+
+func TestLoadGitignoreWithConfig(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "fw.toml")
+
+	if err := os.WriteFile(cfgPath, []byte(`path = "./src"`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("# comment\n/build\n\nnode_modules\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+
+	if len(cfg.Ignore) != 2 {
+		t.Fatalf("expected 2 ignore patterns, got %d: %v", len(cfg.Ignore), cfg.Ignore)
+	}
+	if cfg.Ignore[0] != "/build" || cfg.Ignore[1] != "node_modules" {
+		t.Errorf("unexpected ignore patterns: %v", cfg.Ignore)
+	}
+}
+
 func TestFindFwTomlPreferredOverHidden(t *testing.T) {
 	dir := t.TempDir()
 
-	if err := os.WriteFile(filepath.Join(dir, "fw.toml"), []byte(`path = "./explicit"`), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "fw.toml"), []byte(`path = "./explicit"`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, ".fw.toml"), []byte(`path = "./hidden"`), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".fw.toml"), []byte(`path = "./hidden"`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

@@ -1,5 +1,5 @@
 path = "."
 commands = ["go test ./..."]
 extensions = [".go"]
-ignore = ["*_test.go", "vendor"]
-debug = false
+ignore = ["*_test.go", "vendor", ".git", ".crush"]
+debug = true

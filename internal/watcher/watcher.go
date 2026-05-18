@@ -11,11 +11,12 @@ import (
 
 	"github.com/charmbracelet/log"
 	"github.com/fsnotify/fsnotify"
+	"github.com/xrzks/fw/internal/ignore"
 )
 
 const debounceMs = 500
 
-func Watch(ctx context.Context, path string, commands []string, extensions []string, logger *log.Logger) error {
+func Watch(ctx context.Context, path string, commands []string, extensions []string, ignorer *ignore.Matcher, logger *log.Logger) error {
 	logger.Debugf("Starting watcher with path: %s, debounce: %dms", path, debounceMs)
 
 	watcher, err := fsnotify.NewWatcher()
@@ -39,15 +40,15 @@ func Watch(ctx context.Context, path string, commands []string, extensions []str
 		watchedCount = 1
 		logger.Infof("Watching %s: %s", pt, path)
 	} else {
-		watchedCount, err = addWatchDir(watcher, path, logger)
+		watchedCount, err = addWatchDir(watcher, path, ignorer, logger)
 		if err != nil {
 			return fmt.Errorf("failed to watch path %q: %w", path, err)
 		}
-		logger.Infof("Watching directory: %s (%d subdirectories)", path, watchedCount)
+		logger.Infof("Watching directory: %s (%d directories)", path, watchedCount)
 	}
 
 	debouncer := NewDebouncer(ctx, time.Duration(debounceMs)*time.Millisecond, func(event fsnotify.Event) {
-		logger.Debugf("Triggering debouncer for event: %s (%v)", event.Name, event.Op)
+		logger.Debugf("Debounce settled, executing callback for: %s (%v)", event.Name, event.Op)
 		if err := runCommands(ctx, commands, event, logger); err != nil {
 			logger.Errorf("Command failed: %v", err)
 		}
@@ -68,7 +69,16 @@ func Watch(ctx context.Context, path string, commands []string, extensions []str
 				logger.Debugf("Received event: %s (%v)", event.Name, event.Op)
 				if event.Has(fsnotify.Create) {
 					if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
-						count, err := addWatchDir(watcher, event.Name, logger)
+						eventRel, err := filepath.Rel(path, event.Name)
+						if err != nil {
+							logger.Warnf("Failed to compute relative path for %q: %v", event.Name, err)
+							eventRel = event.Name
+						}
+						if ignorer.Match(eventRel) {
+							logger.Debugf("Skipping ignored new directory %q", eventRel)
+							continue
+						}
+						count, err := addWatchDir(watcher, event.Name, ignorer, logger)
 						if err != nil {
 							logger.Errorf("Failed to watch new directory %q: %v", event.Name, err)
 						} else {
@@ -78,6 +88,15 @@ func Watch(ctx context.Context, path string, commands []string, extensions []str
 				}
 				if !matchExtension(event.Name, extensions) {
 					logger.Debugf("Skipping event: extension filter did not match %s", event.Name)
+					continue
+				}
+				eventRel, err := filepath.Rel(path, event.Name)
+				if err != nil {
+					logger.Warnf("Failed to compute relative path for %q: %v", event.Name, err)
+					eventRel = event.Name
+				}
+				if ignorer.Match(eventRel) {
+					logger.Debugf("Skipping event: ignore pattern matched %s", eventRel)
 					continue
 				}
 				debouncer.Trigger(event)
@@ -107,7 +126,7 @@ func getPathType(path string) (string, error) {
 	return "directory", nil
 }
 
-func addWatchDir(watcher *fsnotify.Watcher, root string, logger *log.Logger) (int, error) {
+func addWatchDir(watcher *fsnotify.Watcher, root string, ignorer *ignore.Matcher, logger *log.Logger) (int, error) {
 	var count int
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -116,6 +135,11 @@ func addWatchDir(watcher *fsnotify.Watcher, root string, logger *log.Logger) (in
 		}
 		if !d.IsDir() {
 			return nil
+		}
+		rel, relErr := filepath.Rel(root, path)
+		if relErr == nil && rel != "." && ignorer.Match(rel) {
+			logger.Debugf("Skipping ignored directory %q", rel)
+			return filepath.SkipDir
 		}
 		if err := watcher.Add(path); err != nil {
 			logger.Debugf("Skipping unwatchable directory %q: %v", path, err)

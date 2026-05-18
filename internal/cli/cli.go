@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/urfave/cli/v3"
 	"github.com/xrzks/fw/internal/config"
+	"github.com/xrzks/fw/internal/ignore"
 	"github.com/xrzks/fw/internal/watcher"
 )
 
@@ -32,10 +33,16 @@ func New() *cli.Command {
 				Aliases: []string{"D"},
 				Usage:   "enable debug logging",
 			},
+
 			&cli.StringSliceFlag{
 				Name:    "extension",
 				Aliases: []string{"e"},
 				Usage:   "file extension to watch (can be specified multiple times)",
+			},
+			&cli.StringSliceFlag{
+				Name:    "ignore",
+				Aliases: []string{"i"},
+				Usage:   "glob pattern to ignore (can be specified multiple times)",
 			},
 		},
 		Arguments: []cli.Argument{
@@ -57,9 +64,10 @@ func run(ctx context.Context, cmd *cli.Command) error {
 	path := resolvePath(cmd, cfg)
 	commands := resolveCommands(cmd, cfg)
 	extensions := resolveExtensions(cmd, cfg)
+	ignorer := resolveIgnore(cmd, cfg)
 	logger := newLogger(cmd, cfg)
 
-	return watcher.Watch(ctx, path, commands, extensions, logger)
+	return watcher.Watch(ctx, path, commands, extensions, ignorer, logger)
 }
 
 func loadConfig(cmd *cli.Command) (*config.Config, error) {
@@ -80,23 +88,30 @@ func resolvePath(cmd *cli.Command, cfg *config.Config) string {
 }
 
 func resolveCommands(cmd *cli.Command, cfg *config.Config) []string {
-	if commands := cmd.StringSlice("command"); len(commands) > 0 {
-		return commands
-	}
+	var commands []string
 	if cfg != nil {
-		return cfg.Commands
+		commands = append(commands, cfg.Commands...)
 	}
-	return nil
+	commands = append(commands, cmd.StringSlice("command")...)
+	return commands
 }
 
 func resolveExtensions(cmd *cli.Command, cfg *config.Config) []string {
-	if extensions := cmd.StringSlice("extension"); len(extensions) > 0 {
-		return extensions
-	}
+	var extensions []string
 	if cfg != nil {
-		return cfg.Extensions
+		extensions = append(extensions, cfg.Extensions...)
 	}
-	return nil
+	extensions = append(extensions, cmd.StringSlice("extension")...)
+	return extensions
+}
+
+func resolveIgnore(cmd *cli.Command, cfg *config.Config) *ignore.Matcher {
+	var patterns []string
+	if cfg != nil {
+		patterns = append(patterns, cfg.Ignore...)
+	}
+	patterns = append(patterns, cmd.StringSlice("ignore")...)
+	return ignore.New(patterns)
 }
 
 func newLogger(cmd *cli.Command, cfg *config.Config) *log.Logger {

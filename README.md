@@ -9,6 +9,7 @@ A file watcher CLI that watches directories or files for changes and executes co
 - Execute one or more commands on file changes
 - Built-in 500ms debounce to coalesce rapid-fire events
 - File extension filtering
+- Ignore patterns with glob support (`.gitignore` auto-loaded)
 - Automatic watching of newly created subdirectories
 - TOML config file support (`fw.toml`)
 - Debug logging mode
@@ -74,6 +75,17 @@ fw -c "npm run build" -e .js -e .ts -e .css
 
 Extensions can be specified with or without a leading dot (`go` and `.go` both work). Matching is case-insensitive.
 
+### Ignore patterns
+
+Ignore files or directories matching glob patterns:
+
+```bash
+fw -c "go test ./..." -i "*_test.go" -i vendor
+```
+
+Patterns prefixed with `!` act as exceptions (un-ignore previously matched paths). If a `.gitignore` file exists in the
+current directory, its entries are automatically loaded.
+
 ### Debug mode
 
 Enable debug logging to see internal event processing details:
@@ -90,6 +102,7 @@ Create a `fw.toml` (or `.fw.toml`) file in your project directory:
 path = "./src"
 commands = ["npm run build", "npm test"]
 extensions = [".js", ".ts"]
+ignore = ["*_test.go", "vendor", ".git"]
 debug = false
 ```
 
@@ -108,6 +121,5 @@ go install github.com/xrzks/fw@latest
 
 ## Roadmap
 
-- Ignore patterns (`.gitignore` style)
 - Environment variable expansion (`$FILE`, `$EVENT`)
-- Stop on first command failure flag (`-e`)
+- Stop on first command failure flag
