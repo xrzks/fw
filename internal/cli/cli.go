@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/log"
 	"github.com/urfave/cli/v3"
+	"github.com/xrzks/fw/internal/config"
 	"github.com/xrzks/fw/internal/watcher"
 )
 
@@ -16,6 +17,11 @@ func New() *cli.Command {
 		Version:     "0.1.0",
 		Description: "fw watches a file or directory for changes and runs the specified commands when a change is detected.",
 		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:    "config",
+				Aliases: []string{"C"},
+				Usage:   "path to config file (fw.toml or .fw.toml are auto-detected)",
+			},
 			&cli.StringSliceFlag{
 				Name:    "command",
 				Aliases: []string{"c"},
@@ -43,16 +49,52 @@ func New() *cli.Command {
 }
 
 func run(ctx context.Context, cmd *cli.Command) error {
+	var cfg *config.Config
+
+	if configPath := cmd.String("config"); configPath != "" {
+		var err error
+		cfg, err = config.Load(configPath)
+		if err != nil {
+			return err
+		}
+	} else {
+		var err error
+		cfg, err = config.Find()
+		if err != nil {
+			return err
+		}
+	}
+
 	path := cmd.StringArg("path")
 	if path == "" {
-		path = "."
+		if cfg != nil && cfg.Path != "" {
+			path = cfg.Path
+		} else {
+			path = "."
+		}
 	}
+
+	commands := cmd.StringSlice("command")
+	if len(commands) == 0 && cfg != nil {
+		commands = cfg.Commands
+	}
+
+	extensions := cmd.StringSlice("extension")
+	if len(extensions) == 0 && cfg != nil {
+		extensions = cfg.Extensions
+	}
+
+	debug := cmd.Bool("debug")
+	if !debug && cfg != nil {
+		debug = cfg.Debug
+	}
+
 	logger := log.New(os.Stderr)
-	if cmd.Bool("debug") {
+	if debug {
 		logger.SetLevel(log.DebugLevel)
 	} else {
 		logger.SetLevel(log.InfoLevel)
 	}
 
-	return watcher.Watch(ctx, path, cmd.StringSlice("command"), cmd.StringSlice("extension"), logger)
+	return watcher.Watch(ctx, path, commands, extensions, logger)
 }

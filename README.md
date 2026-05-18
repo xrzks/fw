@@ -1,6 +1,7 @@
 # fw
 
-A file watcher CLI that watches directories or files for changes and executes commands. Built with Go, powered by [fsnotify](https://github.com/fsnotify/fsnotify) and [urfave/cli](https://github.com/urfave/cli).
+A file watcher CLI that watches directories or files for changes and executes commands. Built with Go, powered by
+[fsnotify](https://github.com/fsnotify/fsnotify) and [urfave/cli](https://github.com/urfave/cli).
 
 ## Features
 
@@ -9,6 +10,7 @@ A file watcher CLI that watches directories or files for changes and executes co
 - Built-in 500ms debounce to coalesce rapid-fire events
 - File extension filtering
 - Automatic watching of newly created subdirectories
+- TOML config file support (`fw.toml`)
 - Debug logging mode
 - Graceful shutdown via SIGINT/SIGTERM
 
@@ -80,6 +82,24 @@ Enable debug logging to see internal event processing details:
 fw -D -c "npm run build"
 ```
 
+### Config file
+
+Create a `fw.toml` (or `.fw.toml`) file in your project directory:
+
+```toml
+path = "./src"
+commands = ["npm run build", "npm test"]
+extensions = [".js", ".ts"]
+debug = false
+```
+
+All fields are optional. CLI flags override config file values. Auto-detected in the current directory; use `-C` to
+specify a custom path:
+
+```bash
+fw -C ./config/fw.toml
+```
+
 ## Installation
 
 ```bash
@@ -88,7 +108,6 @@ go install github.com/xrzks/fw@latest
 
 ## Roadmap
 
-- Local config file (`.fw.json`)
 - Ignore patterns (`.gitignore` style)
 - Environment variable expansion (`$FILE`, `$EVENT`)
 - Stop on first command failure flag (`-e`)
