@@ -1,0 +1,5 @@
+path = "."
+commands = ["go test ./..."]
+extensions = [".go"]
+ignore = ["*_test.go", "vendor"]
+debug = false
