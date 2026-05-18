@@ -49,41 +49,57 @@ func New() *cli.Command {
 }
 
 func run(ctx context.Context, cmd *cli.Command) error {
-	var cfg *config.Config
+	cfg, err := loadConfig(cmd)
+	if err != nil {
+		return err
+	}
 
+	path := resolvePath(cmd, cfg)
+	commands := resolveCommands(cmd, cfg)
+	extensions := resolveExtensions(cmd, cfg)
+	logger := newLogger(cmd, cfg)
+
+	return watcher.Watch(ctx, path, commands, extensions, logger)
+}
+
+func loadConfig(cmd *cli.Command) (*config.Config, error) {
 	if configPath := cmd.String("config"); configPath != "" {
-		var err error
-		cfg, err = config.Load(configPath)
-		if err != nil {
-			return err
-		}
-	} else {
-		var err error
-		cfg, err = config.Find()
-		if err != nil {
-			return err
-		}
+		return config.Load(configPath)
 	}
+	return config.Find()
+}
 
-	path := cmd.StringArg("path")
-	if path == "" {
-		if cfg != nil && cfg.Path != "" {
-			path = cfg.Path
-		} else {
-			path = "."
-		}
+func resolvePath(cmd *cli.Command, cfg *config.Config) string {
+	if path := cmd.StringArg("path"); path != "" {
+		return path
 	}
-
-	commands := cmd.StringSlice("command")
-	if len(commands) == 0 && cfg != nil {
-		commands = cfg.Commands
+	if cfg != nil && cfg.Path != "" {
+		return cfg.Path
 	}
+	return "."
+}
 
-	extensions := cmd.StringSlice("extension")
-	if len(extensions) == 0 && cfg != nil {
-		extensions = cfg.Extensions
+func resolveCommands(cmd *cli.Command, cfg *config.Config) []string {
+	if commands := cmd.StringSlice("command"); len(commands) > 0 {
+		return commands
 	}
+	if cfg != nil {
+		return cfg.Commands
+	}
+	return nil
+}
 
+func resolveExtensions(cmd *cli.Command, cfg *config.Config) []string {
+	if extensions := cmd.StringSlice("extension"); len(extensions) > 0 {
+		return extensions
+	}
+	if cfg != nil {
+		return cfg.Extensions
+	}
+	return nil
+}
+
+func newLogger(cmd *cli.Command, cfg *config.Config) *log.Logger {
 	debug := cmd.Bool("debug")
 	if !debug && cfg != nil {
 		debug = cfg.Debug
@@ -95,6 +111,5 @@ func run(ctx context.Context, cmd *cli.Command) error {
 	} else {
 		logger.SetLevel(log.InfoLevel)
 	}
-
-	return watcher.Watch(ctx, path, commands, extensions, logger)
+	return logger
 }
