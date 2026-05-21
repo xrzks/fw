@@ -106,8 +106,8 @@ ignore = ["*_test.go", "vendor", ".git"]
 debug = false
 ```
 
-All fields are optional. CLI flags override config file values. Auto-detected in the current directory; use `-C` to
-specify a custom path:
+All fields are optional. `commands`, `extensions`, and `ignore` are merged between the config file and CLI flags; `path`
+and `debug` are overridden by CLI flags. Auto-detected in the current directory; use `-C` to specify a custom path:
 
 ```bash
 fw -C ./config/fw.toml

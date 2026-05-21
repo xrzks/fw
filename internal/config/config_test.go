@@ -100,7 +100,7 @@ func TestFindFwToml(t *testing.T) {
 	}
 	defer os.Chdir(origDir)
 
-	cfg, err := Find()
+	cfg, err := FindAndLoad()
 	if err != nil {
 		t.Fatalf("Find() error: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestFindHiddenFwToml(t *testing.T) {
 	}
 	defer os.Chdir(origDir)
 
-	cfg, err := Find()
+	cfg, err := FindAndLoad()
 	if err != nil {
 		t.Fatalf("Find() error: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestFindNoConfig(t *testing.T) {
 	}
 	defer os.Chdir(origDir)
 
-	cfg, err := Find()
+	cfg, err := FindAndLoad()
 	if err != nil {
 		t.Fatalf("Find() error: %v", err)
 	}
@@ -169,7 +169,7 @@ node_modules
 		t.Fatal(err)
 	}
 
-	patterns := loadGitignore(dir)
+	patterns := LoadGitignore(dir)
 
 	expected := []string{"/build", "node_modules"}
 	if len(patterns) != len(expected) {
@@ -184,7 +184,7 @@ node_modules
 
 func TestLoadGitignoreNoFile(t *testing.T) {
 	dir := t.TempDir()
-	patterns := loadGitignore(dir)
+	patterns := LoadGitignore(dir)
 	if len(patterns) != 0 {
 		t.Errorf("expected no patterns, got %v", patterns)
 	}
@@ -206,11 +206,8 @@ func TestLoadGitignoreWithConfig(t *testing.T) {
 		t.Fatalf("Load() error: %v", err)
 	}
 
-	if len(cfg.Ignore) != 2 {
-		t.Fatalf("expected 2 ignore patterns, got %d: %v", len(cfg.Ignore), cfg.Ignore)
-	}
-	if cfg.Ignore[0] != "/build" || cfg.Ignore[1] != "node_modules" {
-		t.Errorf("unexpected ignore patterns: %v", cfg.Ignore)
+	if len(cfg.Ignore) != 0 {
+		t.Fatalf("expected 0 ignore patterns from Load, got %d: %v", len(cfg.Ignore), cfg.Ignore)
 	}
 }
 
@@ -230,7 +227,7 @@ func TestFindFwTomlPreferredOverHidden(t *testing.T) {
 	}
 	defer os.Chdir(origDir)
 
-	cfg, err := Find()
+	cfg, err := FindAndLoad()
 	if err != nil {
 		t.Fatalf("Find() error: %v", err)
 	}

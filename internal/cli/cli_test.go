@@ -21,8 +21,8 @@ func TestNewCommand(t *testing.T) {
 	if cmd.Action == nil {
 		t.Error("expected action to be set")
 	}
-	if len(cmd.Flags) != 5 {
-		t.Errorf("expected 5 flags, got %d", len(cmd.Flags))
+	if len(cmd.Flags) != 6 {
+		t.Errorf("expected 6 flags, got %d", len(cmd.Flags))
 	}
 }
 

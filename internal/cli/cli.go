@@ -17,6 +17,7 @@ func New() *cli.Command {
 		Usage:       "watch files and run commands on change",
 		Version:     "0.1.0",
 		Description: "fw watches a file or directory for changes and runs the specified commands when a change is detected.",
+		ArgsUsage:   "[path]",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:    "config",
@@ -43,6 +44,10 @@ func New() *cli.Command {
 				Name:    "ignore",
 				Aliases: []string{"i"},
 				Usage:   "glob pattern to ignore (can be specified multiple times)",
+			},
+			&cli.BoolFlag{
+				Name:  "no-gitignore",
+				Usage: "disable automatic .gitignore loading",
 			},
 		},
 		Arguments: []cli.Argument{
@@ -74,7 +79,7 @@ func loadConfig(cmd *cli.Command) (*config.Config, error) {
 	if configPath := cmd.String("config"); configPath != "" {
 		return config.Load(configPath)
 	}
-	return config.Find()
+	return config.FindAndLoad()
 }
 
 func resolvePath(cmd *cli.Command, cfg *config.Config) string {
@@ -109,6 +114,17 @@ func resolveIgnore(cmd *cli.Command, cfg *config.Config) *ignore.Matcher {
 	var patterns []string
 	if cfg != nil {
 		patterns = append(patterns, cfg.Ignore...)
+	}
+	noGitignore := cmd.Bool("no-gitignore")
+	if !noGitignore && cfg != nil {
+		noGitignore = cfg.NoGitignore
+	}
+	if !noGitignore {
+		gitignoreDir := "."
+		if cfg != nil && cfg.Path != "" {
+			gitignoreDir = cfg.Path
+		}
+		patterns = append(patterns, config.LoadGitignore(gitignoreDir)...)
 	}
 	patterns = append(patterns, cmd.StringSlice("ignore")...)
 	return ignore.New(patterns)
