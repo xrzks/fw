@@ -16,7 +16,7 @@ func New() *cli.Command {
 	return &cli.Command{
 		Name:        "fw",
 		Usage:       "watch files and run commands on change",
-		Version:     "0.1.0",
+		Version:     "1.0.0",
 		Description: "fw watches a file or directory for changes and runs the specified commands when a change is detected.",
 		ArgsUsage:   "[path]",
 		Flags: []cli.Flag{
