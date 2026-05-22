@@ -2,9 +2,11 @@ package cli
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/urfave/cli/v3"
 	"github.com/xrzks/fw/internal/config"
 )
@@ -21,8 +23,8 @@ func TestNewCommand(t *testing.T) {
 	if cmd.Action == nil {
 		t.Error("expected action to be set")
 	}
-	if len(cmd.Flags) != 6 {
-		t.Errorf("expected 6 flags, got %d", len(cmd.Flags))
+	if len(cmd.Flags) != 7 {
+		t.Errorf("expected 7 flags, got %d", len(cmd.Flags))
 	}
 }
 
@@ -200,7 +202,7 @@ func TestResolveIgnoreMerge(t *testing.T) {
 	})
 	cfg := &config.Config{Ignore: []string{"node_modules", ".git"}}
 
-	matcher := resolveIgnore(cmd, cfg)
+	matcher, _ := resolveIgnore(cmd, cfg, log.New(os.Stderr))
 
 	if !matcher.Match("node_modules") {
 		t.Error("expected config ignore 'node_modules' to match")
@@ -217,7 +219,7 @@ func TestResolveIgnoreConfigOnly(t *testing.T) {
 	cmd := newTestCmd(t, nil)
 	cfg := &config.Config{Ignore: []string{"node_modules"}}
 
-	matcher := resolveIgnore(cmd, cfg)
+	matcher, _ := resolveIgnore(cmd, cfg, log.New(os.Stderr))
 
 	if !matcher.Match("node_modules") {
 		t.Error("expected config ignore to match")
@@ -229,7 +231,7 @@ func TestResolveIgnoreCLIOnly(t *testing.T) {
 		"ignore": {"*.log"},
 	})
 
-	matcher := resolveIgnore(cmd, nil)
+	matcher, _ := resolveIgnore(cmd, nil, log.New(os.Stderr))
 
 	if !matcher.Match("app.log") {
 		t.Error("expected CLI ignore to match")
@@ -242,7 +244,7 @@ func TestResolveIgnoreCLIOnly(t *testing.T) {
 func TestResolveIgnoreNone(t *testing.T) {
 	cmd := newTestCmd(t, nil)
 
-	matcher := resolveIgnore(cmd, nil)
+	matcher, _ := resolveIgnore(cmd, nil, log.New(os.Stderr))
 
 	if matcher.Match("anything") {
 		t.Error("expected nothing to match with no patterns")

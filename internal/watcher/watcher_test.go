@@ -37,7 +37,7 @@ func TestWatchDetectsFileChange(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- Watch(ctx, dir, commands, nil, newTestIgnorer(), newTestLogger())
+		errCh <- Watch(ctx, WatchOptions{Path: dir, Commands: commands, Ignorer: newTestIgnorer(), Logger: newTestLogger()})
 	}()
 
 	time.Sleep(200 * time.Millisecond)
@@ -69,7 +69,7 @@ func TestWatchDetectsNewFile(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- Watch(ctx, dir, commands, nil, newTestIgnorer(), newTestLogger())
+		errCh <- Watch(ctx, WatchOptions{Path: dir, Commands: commands, Ignorer: newTestIgnorer(), Logger: newTestLogger()})
 	}()
 
 	time.Sleep(200 * time.Millisecond)
@@ -95,7 +95,7 @@ func TestWatchInvalidPath(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	err := Watch(ctx, "/nonexistent/path/that/does/not/exist", nil, nil, newTestIgnorer(), newTestLogger())
+	err := Watch(ctx, WatchOptions{Path: "/nonexistent/path/that/does/not/exist", Ignorer: newTestIgnorer(), Logger: newTestLogger()})
 	if err == nil {
 		t.Error("expected error for invalid path")
 	}
@@ -108,7 +108,7 @@ func TestWatchContextCancellation(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- Watch(ctx, dir, []string{"echo test"}, nil, newTestIgnorer(), newTestLogger())
+		errCh <- Watch(ctx, WatchOptions{Path: dir, Commands: []string{"echo test"}, Ignorer: newTestIgnorer(), Logger: newTestLogger()})
 	}()
 
 	time.Sleep(100 * time.Millisecond)
@@ -172,7 +172,7 @@ func TestWatchRecursiveDetectsNestedFileChange(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- Watch(ctx, dir, commands, nil, newTestIgnorer(), newTestLogger())
+		errCh <- Watch(ctx, WatchOptions{Path: dir, Commands: commands, Ignorer: newTestIgnorer(), Logger: newTestLogger()})
 	}()
 
 	time.Sleep(200 * time.Millisecond)
@@ -204,7 +204,7 @@ func TestWatchRecursiveDetectsNewDirectory(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- Watch(ctx, dir, commands, nil, newTestIgnorer(), newTestLogger())
+		errCh <- Watch(ctx, WatchOptions{Path: dir, Commands: commands, Ignorer: newTestIgnorer(), Logger: newTestLogger()})
 	}()
 
 	time.Sleep(200 * time.Millisecond)
@@ -313,7 +313,7 @@ func TestWatchExtensionFilter(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- Watch(ctx, dir, commands, []string{".go"}, newTestIgnorer(), newTestLogger())
+		errCh <- Watch(ctx, WatchOptions{Path: dir, Commands: commands, Extensions: []string{".go"}, Ignorer: newTestIgnorer(), Logger: newTestLogger()})
 	}()
 
 	time.Sleep(200 * time.Millisecond)
@@ -362,7 +362,7 @@ func TestWatchIgnoredFileSkipped(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- Watch(ctx, dir, commands, nil, ignorer, newTestLogger())
+		errCh <- Watch(ctx, WatchOptions{Path: dir, Commands: commands, Ignorer: ignorer, Logger: newTestLogger()})
 	}()
 
 	time.Sleep(200 * time.Millisecond)
@@ -394,7 +394,7 @@ func TestWatchIgnoredNewDirectorySkipped(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- Watch(ctx, dir, commands, nil, ignorer, newTestLogger())
+		errCh <- Watch(ctx, WatchOptions{Path: dir, Commands: commands, Ignorer: ignorer, Logger: newTestLogger()})
 	}()
 
 	time.Sleep(200 * time.Millisecond)

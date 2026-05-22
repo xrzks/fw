@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/log"
 	"github.com/urfave/cli/v3"
+
 	"github.com/xrzks/fw/internal/config"
 	"github.com/xrzks/fw/internal/ignore"
 	"github.com/xrzks/fw/internal/watcher"
@@ -34,7 +35,6 @@ func New() *cli.Command {
 				Aliases: []string{"D"},
 				Usage:   "enable debug logging",
 			},
-
 			&cli.StringSliceFlag{
 				Name:    "extension",
 				Aliases: []string{"e"},
@@ -48,6 +48,11 @@ func New() *cli.Command {
 			&cli.BoolFlag{
 				Name:  "no-gitignore",
 				Usage: "disable automatic .gitignore loading",
+			},
+			&cli.BoolFlag{
+				Name:    "fail-fast",
+				Aliases: []string{"f"},
+				Usage:   "stop running subsequent commands on first failure",
 			},
 		},
 		Arguments: []cli.Argument{
@@ -66,13 +71,30 @@ func run(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 
+	logger := newLogger(cmd, cfg)
+
+	if cfg != nil {
+		logger.Debug("Config loaded", "path", cfg.Path, "commands", cfg.Commands, "extensions", cfg.Extensions, "ignore", cfg.Ignore, "no-gitignore", cfg.NoGitignore, "fail-fast", cfg.FailFast, "debug", cfg.Debug)
+	} else {
+		logger.Debug("No config file found, using defaults")
+	}
+
 	path := resolvePath(cmd, cfg)
 	commands := resolveCommands(cmd, cfg)
 	extensions := resolveExtensions(cmd, cfg)
-	ignorer := resolveIgnore(cmd, cfg)
-	logger := newLogger(cmd, cfg)
+	ignorer, ignorePatterns := resolveIgnore(cmd, cfg, logger)
+	failFast := resolveFailFast(cmd, cfg)
 
-	return watcher.Watch(ctx, path, commands, extensions, ignorer, logger)
+	logger.Debug("Resolved config", "path", path, "commands", commands, "extensions", extensions, "ignore-patterns", ignorePatterns, "fail-fast", failFast)
+
+	return watcher.Watch(ctx, watcher.WatchOptions{
+		Path:       path,
+		Commands:   commands,
+		Extensions: extensions,
+		Ignorer:    ignorer,
+		Logger:     logger,
+		FailFast:   failFast,
+	})
 }
 
 func loadConfig(cmd *cli.Command) (*config.Config, error) {
@@ -110,7 +132,7 @@ func resolveExtensions(cmd *cli.Command, cfg *config.Config) []string {
 	return extensions
 }
 
-func resolveIgnore(cmd *cli.Command, cfg *config.Config) *ignore.Matcher {
+func resolveIgnore(cmd *cli.Command, cfg *config.Config, logger *log.Logger) (*ignore.Matcher, []string) {
 	var patterns []string
 	if cfg != nil {
 		patterns = append(patterns, cfg.Ignore...)
@@ -124,10 +146,24 @@ func resolveIgnore(cmd *cli.Command, cfg *config.Config) *ignore.Matcher {
 		if cfg != nil && cfg.Path != "" {
 			gitignoreDir = cfg.Path
 		}
-		patterns = append(patterns, config.LoadGitignore(gitignoreDir)...)
+		gitignorePatterns := config.LoadGitignore(gitignoreDir)
+		logger.Debugf("Loaded %d patterns from .gitignore in %s", len(gitignorePatterns), gitignoreDir)
+		patterns = append(patterns, gitignorePatterns...)
+	} else {
+		logger.Debug(".gitignore loading disabled")
 	}
 	patterns = append(patterns, cmd.StringSlice("ignore")...)
-	return ignore.New(patterns)
+	return ignore.New(patterns), patterns
+}
+
+func resolveFailFast(cmd *cli.Command, cfg *config.Config) bool {
+	if cmd.IsSet("fail-fast") {
+		return cmd.Bool("fail-fast")
+	}
+	if cfg != nil {
+		return cfg.FailFast
+	}
+	return false
 }
 
 func newLogger(cmd *cli.Command, cfg *config.Config) *log.Logger {

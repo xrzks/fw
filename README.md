@@ -9,11 +9,17 @@ A file watcher CLI that watches directories or files for changes and executes co
 - Execute one or more commands on file changes
 - Built-in 500ms debounce to coalesce rapid-fire events
 - File extension filtering
-- Ignore patterns with glob support (`.gitignore` auto-loaded)
+- Ignore patterns with glob support (`.gitignore` auto-loaded, disable with `--no-gitignore`)
 - Automatic watching of newly created subdirectories
 - TOML config file support (`fw.toml`)
 - Debug logging mode
 - Graceful shutdown via SIGINT/SIGTERM
+
+## Installation
+
+```bash
+go install github.com/xrzks/fw@latest
+```
 
 ## Usage
 
@@ -57,7 +63,7 @@ Run multiple commands in sequence:
 fw -c "npm run build" -c "npm run test"
 ```
 
-Commands execute in the order specified. If a command fails, execution continues with the next command.
+Commands execute in the order specified. By default, if a command fails, execution continues with the next command. Use `--fail-fast` to stop on first failure.
 
 ### Extension filtering
 
@@ -86,6 +92,22 @@ fw -c "go test ./..." -i "*_test.go" -i vendor
 Patterns prefixed with `!` act as exceptions (un-ignore previously matched paths). If a `.gitignore` file exists in the
 current directory, its entries are automatically loaded.
 
+### Fail fast
+
+Stop executing subsequent commands after the first failure:
+
+```bash
+fw -c "go build" -c "go test ./..." --fail-fast
+```
+
+### Skip .gitignore
+
+Disable automatic `.gitignore` loading:
+
+```bash
+fw --no-gitignore -c "go test ./..."
+```
+
 ### Debug mode
 
 Enable debug logging to see internal event processing details:
@@ -103,23 +125,26 @@ path = "./src"
 commands = ["npm run build", "npm test"]
 extensions = [".js", ".ts"]
 ignore = ["*_test.go", "vendor", ".git"]
+no-gitignore = false
+fail-fast = false
 debug = false
 ```
 
-All fields are optional. `commands`, `extensions`, and `ignore` are merged between the config file and CLI flags; `path`
-and `debug` are overridden by CLI flags. Auto-detected in the current directory; use `-C` to specify a custom path:
+All fields are optional. `commands`, `extensions`, and `ignore` are merged between the config file and CLI flags; all
+other fields are overridden by CLI flags. Auto-detected in the current directory; use `-C` to specify a custom path:
 
 ```bash
 fw -C ./config/fw.toml
 ```
 
-## Installation
+## Flags
 
-```bash
-go install github.com/xrzks/fw@latest
-```
-
-## Roadmap
-
-- Environment variable expansion (`$FILE`, `$EVENT`)
-- Stop on first command failure flag
+| Flag | Alias | Description |
+|---|---|---|
+| `--command <cmd>` | `-c` | Command to run on change (repeatable) |
+| `--extension <ext>` | `-e` | File extension filter (repeatable) |
+| `--ignore <pattern>` | `-i` | Glob pattern to ignore (repeatable) |
+| `--fail-fast` | `-f` | Stop on first command failure |
+| `--no-gitignore` | | Disable automatic `.gitignore` loading |
+| `--config <path>` | `-C` | Path to config file |
+| `--debug` | `-D` | Enable debug logging |

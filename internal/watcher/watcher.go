@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/charmbracelet/log"
@@ -16,7 +17,22 @@ import (
 
 const debounceMs = 500
 
-func Watch(ctx context.Context, path string, commands []string, extensions []string, ignorer *ignore.Matcher, logger *log.Logger) error {
+type WatchOptions struct {
+	Path       string
+	Commands   []string
+	Extensions []string
+	Ignorer    *ignore.Matcher
+	Logger     *log.Logger
+	FailFast   bool
+}
+
+func Watch(ctx context.Context, opts WatchOptions) error {
+	path := opts.Path
+	commands := opts.Commands
+	extensions := opts.Extensions
+	ignorer := opts.Ignorer
+	logger := opts.Logger
+	failFast := opts.FailFast
 	logger.Debugf("Starting watcher with path: %s, debounce: %dms", path, debounceMs)
 
 	watcher, err := fsnotify.NewWatcher()
@@ -47,14 +63,19 @@ func Watch(ctx context.Context, path string, commands []string, extensions []str
 		logger.Infof("Watching directory: %s (%d directories)", path, watchedCount)
 	}
 
+	var running atomic.Bool
 	debouncer := NewDebouncer(ctx, time.Duration(debounceMs)*time.Millisecond, func(event fsnotify.Event) {
 		logger.Debugf("Debounce settled, executing callback for: %s (%v)", event.Name, event.Op)
-		if err := runCommands(ctx, commands, event, logger); err != nil {
+		running.Store(true)
+		defer running.Store(false)
+		if err := runCommands(ctx, commands, event, failFast); err != nil {
 			logger.Errorf("Command failed: %v", err)
 		}
 	})
+	defer debouncer.Stop()
 
 	done := make(chan struct{})
+	errCh := make(chan error, 1)
 	go func() {
 		defer close(done)
 		for {
@@ -66,7 +87,9 @@ func Watch(ctx context.Context, path string, commands []string, extensions []str
 				if !ok {
 					return
 				}
-				logger.Debugf("Received event: %s (%v)", event.Name, event.Op)
+				if !running.Load() {
+					logger.Debugf("Received event: %s (%v)", event.Name, event.Op)
+				}
 				if event.Has(fsnotify.Create) {
 					if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
 						eventRel, err := filepath.Rel(path, event.Name)
@@ -105,14 +128,19 @@ func Watch(ctx context.Context, path string, commands []string, extensions []str
 					return
 				}
 				logger.Errorf("Watcher error: %v", err)
+				errCh <- err
 				return
 			}
 		}
 	}()
 
 	<-done
-	debouncer.Stop()
-	return nil
+	select {
+	case err := <-errCh:
+		return err
+	default:
+		return nil
+	}
 }
 
 func getPathType(path string) (string, error) {
@@ -164,14 +192,13 @@ func matchExtension(name string, extensions []string) bool {
 	return false
 }
 
-func runCommands(ctx context.Context, commands []string, event fsnotify.Event, logger *log.Logger) error {
-	logger.Debugf("Change detected: %s (%v)", event.Name, event.Op)
+func runCommands(ctx context.Context, commands []string, event fsnotify.Event, failFast bool) error {
 	if len(commands) == 0 {
-		fmt.Printf("\n--- change detected: %s (%v) ---\n", event.Name, event.Op)
-		logger.Info("No commands configured to run for this change")
+		fmt.Printf("\n--- change detected: %s (%v) --- (no commands configured)\n", event.Name, event.Op)
 		return nil
 	}
 
+	fmt.Printf("\n--- change detected: %s (%v) ---\n", event.Name, event.Op)
 	var lastErr error
 	for i, cmd := range commands {
 		select {
@@ -180,7 +207,6 @@ func runCommands(ctx context.Context, commands []string, event fsnotify.Event, l
 		default:
 		}
 
-		logger.Debugf("Running command %d/%d: %s", i+1, len(commands), cmd)
 		fmt.Printf("[%d/%d] running: %s\n", i+1, len(commands), cmd)
 
 		command := exec.CommandContext(ctx, "sh", "-c", cmd)
@@ -188,11 +214,12 @@ func runCommands(ctx context.Context, commands []string, event fsnotify.Event, l
 		command.Stderr = os.Stderr
 
 		if err := command.Run(); err != nil {
-			logger.Errorf("Command %d/%d failed: %v", i+1, len(commands), err)
 			fmt.Printf("[%d/%d] failed: %v\n", i+1, len(commands), err)
+			if failFast {
+				return fmt.Errorf("command %q: %w", cmd, err)
+			}
 			lastErr = fmt.Errorf("command %q: %w", cmd, err)
 		} else {
-			logger.Debugf("Command %d/%d completed successfully", i+1, len(commands))
 			fmt.Printf("[%d/%d] done\n", i+1, len(commands))
 		}
 	}

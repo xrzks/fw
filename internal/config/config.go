@@ -16,6 +16,7 @@ type Config struct {
 	Ignore      []string `toml:"ignore" json:"ignore"`
 	Debug       bool     `toml:"debug" json:"debug"`
 	NoGitignore bool     `toml:"no-gitignore" json:"noGitignore"`
+	FailFast    bool     `toml:"fail-fast" json:"failFast"`
 }
 
 func Load(path string) (*Config, error) {
