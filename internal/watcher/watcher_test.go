@@ -287,7 +287,8 @@ func TestMatchExtension(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := matchExtension(tt.fileName, tt.extensions); got != tt.want {
+			extSet := normalizeExtensions(tt.extensions)
+			if got := matchExtension(tt.fileName, extSet); got != tt.want {
 				t.Errorf("matchExtension(%q, %v) = %v, want %v", tt.fileName, tt.extensions, got, tt.want)
 			}
 		})

@@ -24,9 +24,7 @@ func NewDebouncer(ctx context.Context, delay time.Duration, callback func(fsnoti
 		eventCh: eventCh,
 	}
 
-	d.wg.Add(1)
-	go func() {
-		defer d.wg.Done()
+	d.wg.Go(func() {
 		for {
 			select {
 			case <-ctx.Done():
@@ -57,7 +55,7 @@ func NewDebouncer(ctx context.Context, delay time.Duration, callback func(fsnoti
 				callback(event)
 			}
 		}
-	}()
+	})
 
 	return d
 }

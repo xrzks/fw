@@ -24,6 +24,8 @@ type WatchOptions struct {
 	Ignorer    *ignore.Matcher
 	Logger     *log.Logger
 	FailFast   bool
+
+	normalizedExtensions map[string]bool
 }
 
 func Watch(ctx context.Context, opts WatchOptions) error {
@@ -33,13 +35,14 @@ func Watch(ctx context.Context, opts WatchOptions) error {
 	ignorer := opts.Ignorer
 	logger := opts.Logger
 	failFast := opts.FailFast
+
+	normalizedExts := normalizeExtensions(extensions)
 	logger.Debugf("Starting watcher with path: %s, debounce: %dms", path, debounceMs)
 
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return fmt.Errorf("failed to create watcher: %w", err)
 	}
-	defer watcher.Close()
 
 	logger.Debug("Created fsnotify watcher")
 
@@ -90,13 +93,15 @@ func Watch(ctx context.Context, opts WatchOptions) error {
 				if !running.Load() {
 					logger.Debugf("Received event: %s (%v)", event.Name, event.Op)
 				}
+
+				eventRel, err := filepath.Rel(path, event.Name)
+				if err != nil {
+					logger.Warnf("Failed to compute relative path for %q: %v", event.Name, err)
+					eventRel = event.Name
+				}
+
 				if event.Has(fsnotify.Create) {
 					if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
-						eventRel, err := filepath.Rel(path, event.Name)
-						if err != nil {
-							logger.Warnf("Failed to compute relative path for %q: %v", event.Name, err)
-							eventRel = event.Name
-						}
 						if ignorer.Match(eventRel) {
 							logger.Debugf("Skipping ignored new directory %q", eventRel)
 							continue
@@ -109,15 +114,12 @@ func Watch(ctx context.Context, opts WatchOptions) error {
 						}
 					}
 				}
-				if !matchExtension(event.Name, extensions) {
+
+				if !matchExtension(event.Name, normalizedExts) {
 					logger.Debugf("Skipping event: extension filter did not match %s", event.Name)
 					continue
 				}
-				eventRel, err := filepath.Rel(path, event.Name)
-				if err != nil {
-					logger.Warnf("Failed to compute relative path for %q: %v", event.Name, err)
-					eventRel = event.Name
-				}
+
 				if ignorer.Match(eventRel) {
 					logger.Debugf("Skipping event: ignore pattern matched %s", eventRel)
 					continue
@@ -128,6 +130,7 @@ func Watch(ctx context.Context, opts WatchOptions) error {
 					return
 				}
 				logger.Errorf("Watcher error: %v", err)
+				watcher.Close()
 				errCh <- err
 				return
 			}
@@ -179,17 +182,24 @@ func addWatchDir(watcher *fsnotify.Watcher, root string, ignorer *ignore.Matcher
 	return count, err
 }
 
-func matchExtension(name string, extensions []string) bool {
-	if len(extensions) == 0 {
+func normalizeExtensions(extensions []string) map[string]bool {
+	extSet := make(map[string]bool, len(extensions))
+	for _, e := range extensions {
+		ext := strings.ToLower(e)
+		if !strings.HasPrefix(ext, ".") {
+			ext = "." + ext
+		}
+		extSet[ext] = true
+	}
+	return extSet
+}
+
+func matchExtension(name string, extSet map[string]bool) bool {
+	if len(extSet) == 0 {
 		return true
 	}
-	ext := filepath.Ext(name)
-	for _, e := range extensions {
-		if strings.EqualFold(ext, e) || strings.EqualFold(ext, "."+e) {
-			return true
-		}
-	}
-	return false
+	ext := strings.ToLower(filepath.Ext(name))
+	return extSet[ext]
 }
 
 func runCommands(ctx context.Context, commands []string, event fsnotify.Event, failFast bool) error {

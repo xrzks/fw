@@ -17,8 +17,8 @@ func TestNewCommand(t *testing.T) {
 	if cmd.Name != "fw" {
 		t.Errorf("expected command name 'fw', got %q", cmd.Name)
 	}
-	if cmd.Version != "0.1.0" {
-		t.Errorf("expected version '0.1.0', got %q", cmd.Version)
+	if cmd.Version != "1.0.0" {
+		t.Errorf("expected version '1.0.0', got %q", cmd.Version)
 	}
 	if cmd.Action == nil {
 		t.Error("expected action to be set")

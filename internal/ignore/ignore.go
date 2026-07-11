@@ -6,11 +6,16 @@ import (
 )
 
 type Matcher struct {
-	patterns []string
+	patterns           []string
+	normalizedPatterns []string
 }
 
 func New(patterns []string) *Matcher {
-	return &Matcher{patterns: patterns}
+	normalized := make([]string, len(patterns))
+	for i, p := range patterns {
+		normalized[i] = strings.ReplaceAll(p, "\\", "/")
+	}
+	return &Matcher{patterns: patterns, normalizedPatterns: normalized}
 }
 
 func (m *Matcher) Match(path string) bool {
@@ -21,8 +26,7 @@ func (m *Matcher) Match(path string) bool {
 	cleaned := strings.ReplaceAll(path, "\\", "/")
 	result := false
 
-	for _, pattern := range m.patterns {
-		p := strings.ReplaceAll(pattern, "\\", "/")
+	for _, p := range m.normalizedPatterns {
 
 		negate := false
 		if strings.HasPrefix(p, "!") {
