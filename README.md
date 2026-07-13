@@ -1,5 +1,3 @@
-[![Go Report Card](https://goreportcard.com/badge/github.com/xrzks/fw)](https://goreportcard.com/report/github.com/xrzks/fw)
-
 # fw - file watcher
 
 CLI tool that watches directories or files for changes and executes commands.
